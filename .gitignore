@@ -1,0 +1,5 @@
+/wls-events-timeline
+/dist/
+/sample-logs/
+/weblogic-timeline.html
+__pycache__/
