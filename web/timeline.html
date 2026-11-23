@@ -44,7 +44,11 @@ const categories=[...new Set(E.map(e=>e.category))].sort(), colors=new Map(categ
 let matching=[],plotted=[],page=0,active=null,trackedEndpoint='';const pageSize=100;
 const laneControl=document.createElement('label');laneControl.className='field';laneControl.textContent='Group chart by';
 const laneSelect=document.createElement('select');laneSelect.id='laneGroup';
-for(const key of ['category','host','server']){const opt=document.createElement('option');opt.value=key;opt.textContent=names[key];laneSelect.append(opt)}
+for(const [key,label] of [['category',names.category],['host',names.host],['server',names.server],['code','BEA / message code'],['hostThread','Hostname + thread ID']]){const opt=document.createElement('option');opt.value=key;opt.textContent=label;laneSelect.append(opt)}
+function threadId(e){return (e.thread||'').replace(/^\[(?:ACTIVE|STANDBY|STUCK|HOGGING)\]\s*/i,'')||'(unspecified)'}
+function laneOf(e,key=laneSelect.value||'category'){
+ return key==='hostThread'?`${e.host||'(unspecified)'} · ${threadId(e)}`:e[key]||'(unspecified)';
+}
 laneControl.append(laneSelect);$('reset').parentElement.append(laneControl);
 const trackStatus=document.createElement('span');trackStatus.id='trackStatus';$('reset').parentElement.append(trackStatus);
 const clearTrack=document.createElement('button');clearTrack.textContent='Clear endpoint tracking';clearTrack.hidden=true;$('reset').parentElement.append(clearTrack);
@@ -170,14 +174,14 @@ function render(){const lo=$('from').value?filterTime($('from').value):rangeStar
  trackStatus.textContent=trackedEndpoint?'Tracking endpoint '+trackedEndpoint+' across source hosts':'';clearTrack.hidden=!trackedEndpoint;
  $('count').textContent=exclusion.error?exclusion.error:(!Number.isFinite(lo)||!Number.isFinite(hi))?'Invalid date/time: use DD/MM/YYYY HH:mm:ss.SSS (24-hour time).':hi<lo?'Invalid time window: end precedes start.':`${plotted.length.toLocaleString()} plotted · ${matching.length.toLocaleString()} matching · ${(candidates.length-matching.length).toLocaleString()} excluded by regex · ${hidden.size.toLocaleString()} individually hidden across all dates · ${E.length.toLocaleString()} total records`;
  if(active&&!matching.some(e=>e.id===active)){active=null;$('detail').innerHTML='<h2>Event details</h2><p>Select an event.</p>'}
- const laneKey=laneSelect.value||'category',laneOf=e=>e[laneKey]||'(unspecified)',lanes=[...new Set(plotted.map(laneOf))].sort(),height=Math.max(150,lanes.length*46+60),x=n=>190+(n-lo)/Math.max(1,hi-lo)*980;let svg=`<rect width="1200" height="${height}" fill="#142034"/>`;
+ const laneKey=laneSelect.value||'category',eventLane=e=>laneOf(e,laneKey),lanes=[...new Set(plotted.map(eventLane))].sort(),height=Math.max(150,lanes.length*46+60),x=n=>190+(n-lo)/Math.max(1,hi-lo)*980;let svg=`<rect width="1200" height="${height}" fill="#142034"/>`;
  chartWindow=validRange?{lo,hi,height}:null;
  if(hi>=lo)for(let i=0;i<=6;i++){const n=lo+(hi-lo)*i/6,xx=x(n);svg+=`<line x1="${xx}" x2="${xx}" y1="28" y2="${height-10}" stroke="#354b69"/><text x="${xx}" y="18" text-anchor="middle">${clock(n).slice(0,10)}<tspan x="${xx}" dy="14">${clock(n).slice(11)}</tspan></text>`}
  // Dense views aggregate adjacent timestamps per lane; exports and lists retain all records.
  const dense=plotted.length>10000;
  overview.textContent=dense?'Dense chart: dots group records into time buckets per lane. Click a group to zoom; lists and exports retain every matching record.':'';
- const byLane=new Map(lanes.map(c=>[c,[]]));plotted.forEach(e=>byLane.get(laneOf(e)).push(e));
- lanes.forEach((c,i)=>{const y=55+i*46;svg+=`<text x="8" y="${y+4}"><title>${esc(c)}</title>${esc(c.slice(0,25))}</text><line x1="190" x2="1170" y1="${y}" y2="${y}" stroke="#354b69"/>`;
+ const byLane=new Map(lanes.map(c=>[c,[]]));plotted.forEach(e=>byLane.get(eventLane(e)).push(e));
+ lanes.forEach((c,i)=>{const y=55+i*46,first=byLane.get(c)[0],label=laneKey==='hostThread'?`${esc((first.host||'(unspecified)').slice(0,25))}<tspan x="8" dy="14">${esc(threadId(first).slice(0,25))}</tspan>`:esc(c.slice(0,25));svg+=`<text x="8" y="${y+4}"><title>${esc(c)}</title>${label}</text><line x1="190" x2="1170" y1="${y}" y2="${y}" stroke="#354b69"/>`;
   const buckets=new Map();byLane.get(c).forEach(e=>{const key=dense?`${Math.floor((eventTime(e)-lo)/Math.max(1,hi-lo)*200)}:${e.severity}`:e.id;const bucket=buckets.get(key);if(bucket){bucket.count++;bucket.end=eventTime(e)}else buckets.set(key,{event:e,count:1,start:eventTime(e),end:eventTime(e)})});
   [...buckets.values()].forEach((b,j)=>{const e=b.event,label=b.count>1?`${b.count} ${e.severity} records · ${c} · click to zoom`:`${e.date} ${e.time} ${e.code} ${e.summary}`;svg+=`<g class="mark" data-severity="${esc(e.severity)}" data-id="${e.id}" data-count="${b.count}" data-start="${b.start}" data-end="${b.end}" tabindex="0" role="button" aria-label="${esc(label)}"><title>${esc(label)}</title><circle cx="${x(b.start)}" cy="${y+(j%5-2)*5}" r="${b.count>1?7:5}" fill="${colors.get(e.category)}"/></g>`});
  });

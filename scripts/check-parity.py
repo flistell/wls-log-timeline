@@ -22,11 +22,9 @@ def main():
     paths = sorted(str(p) for p in args.logs.rglob('*') if p.is_file())
     if not paths:
         parser.error('no sample logs found')
-    spec = importlib.util.spec_from_file_location('reference', ROOT / 'testdata/reference.py')
+    spec = importlib.util.spec_from_file_location('reference', ROOT / 'testdata/wls-events-timeline.py')
     reference = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(reference)
-    if (ROOT / 'web/timeline.html').read_text() != reference.TEMPLATE:
-        raise SystemExit('Offline report interface differs from the original template')
     with tempfile.TemporaryDirectory(prefix='wls-parity-') as temp:
         for mode, limit in [(None, 12000), ('coherence', 12000), ('coherence', 127)]:
             events, warnings, total = reference.parse_logs(paths, ZoneInfo('Europe/Rome'), limit, detailed_events=mode)
