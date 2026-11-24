@@ -37,6 +37,8 @@ Copy the matching executable to the destination Linux machine, rename it to `wls
 
 This creates `weblogic-timeline.html` in the current directory and preserves the original log.
 
+An animated spinner on stderr shows when log files are being processed. It clears before warnings or the completion message. The spinner is disabled when stderr is redirected or `TERM=dumb`, so redirected output stays free of animation.
+
 Pass multiple logs (including shell-expanded wildcards) to combine server logs or rotated files into one timeline:
 
 ```bash
@@ -54,6 +56,25 @@ Records are merged by timestamp. Equal timestamps retain input-file order, then 
 ```
 
 The HTML is written to the file specified by `--output` (or `-o`), or to `weblogic-timeline.html` in the current directory when no output argument is given. An existing HTML destination is replaced. None of the input logs can be used as the output path.
+
+## Serve the report over HTTP
+
+Add `--serve` to generate the HTML file and keep a simple HTTP server running:
+
+```bash
+./wls-events-timeline weblogic.log --timezone Europe/Rome --serve
+```
+
+Open the printed URL, normally `http://127.0.0.1:8080/`, in a browser. Press **Ctrl+C** to stop the server; the generated HTML file remains available offline. The server shows the report generated at startup; it does not watch the input logs or reload later file edits. Only `/` serves content; input logs and other files are not served.
+
+Use `--listen` to choose the address and port. Port `0` selects a free port and prints the actual URL:
+
+```bash
+./wls-events-timeline weblogic.log --serve --listen 127.0.0.1:9000
+./wls-events-timeline weblogic.log --serve --listen 127.0.0.1:0
+```
+
+The default address accepts connections only from this machine. To allow other machines to view the report, explicitly select an interface, for example `--listen 0.0.0.0:8080`, then open `http://<server-hostname>:8080/`. The server uses HTTP without authentication; everyone who can reach that address can read the report. If the address is unavailable, the command reports an error and exits; the generated HTML file is retained. All existing generation options work with `--serve`.
 
 ## Coherence events across hosts
 
@@ -116,7 +137,7 @@ For example, change Warning, Error and Trace accents with:
 }
 ```
 
-The severity variables are `--severity-trace`, `--severity-debug`, `--severity-info`, `--severity-notice`, `--severity-warning`, `--severity-error`, `--severity-critical`, `--severity-alert` and `--severity-emergency`. They control chart dots, event-list accent borders, severity badges and severity filter labels. Severity colors apply in both generic and detailed Coherence modes. Dense chart buckets keep different severities separate, including when they share a timestamp and lane.
+The severity variables are `--severity-trace`, `--severity-debug`, `--severity-info`, `--severity-notice`, `--severity-warning`, `--severity-error`, `--severity-critical`, `--severity-alert` and `--severity-emergency`. They control chart dots, event-list accent borders and legend swatches when **Color chart by → Severity** is selected (the default), plus severity badges and severity filter labels in every color mode. Severity colors apply in both generic and detailed Coherence modes. Dense chart buckets keep different severities and values of the selected color dimension separate, including when they share a timestamp and lane.
 
 You can also override page variables such as `--bg`, `--panel`, `--line`, `--muted` and `--accent`, or use normal CSS selectors. Event marks (`.mark`), list rows (`.row`), severity badges (`.badge`) and severity filter labels expose `data-severity="Warning"`, `data-severity="Error"`, `data-severity="Trace"`, etc. Attribute values use title case.
 
@@ -129,6 +150,7 @@ Use standalone CSS with inline/data-URL assets for offline reports. Relative `ur
 - Enter From and To dates and times in European `DD/MM/YYYY HH:mm:ss.SSS` format with a 24-hour clock to filter across multiple days. Seconds and milliseconds are optional (for example, `02/11/2026 17:30`). Invalid dates or times show a validation message. Text inputs ensure this format is consistent across browser locales. Inputs and chart labels use the report’s `--timezone` (default UTC), independently of the browser timezone. The initial range covers all records; clearing either bound removes that limit. During a daylight-saving clock repeat, both occurrences of a matching local time are included.
 - Toggle categories, severity, individual message codes, servers, hostnames, and source files. Each group has All/None buttons; all groups combine with AND.
 - **Group chart by** selects categories, hostnames, servers, **BEA / message code**, or **Hostname + thread ID**. Message-code grouping includes BEA codes and other recognized codes. Hostname/thread grouping uses the logged WebLogic thread field, keeping its queue name and removing state prefixes such as `[ACTIVE]`, `[STANDBY]`, and `[STUCK]` so state changes stay on the same lane. Missing hosts or threads appear as `(unspecified)`. Host and thread appear on separate lines; hover over a lane label to read the complete values. Grouping works with all filters and dense-chart aggregation.
+- **Color chart by** selects **Categories**, **Severity**, **Message codes**, **Servers**, **Hostnames**, or **Source files**, independently of chart grouping. Chart dots and event-list accent borders use the selected dimension. A collapsible **Color legend** identifies each plotted value and its record count; missing values appear as `(unspecified)`. Colors stay stable when filtering, zooming or changing grouping. Severity is the default and uses the configurable severity colors. Color selection changes the presentation; matching counts and exported records stay the same. Reset filters keeps the selected grouping and color dimension.
 - Search message text, retained stack traces, host, thread or transaction ID.
 - Use **Exclude (regex)** like `grep -v -E` to hide entire records matching any pattern. Commas separate patterns, and `|` separates regex alternatives: `TEMP DEBUG|post-flush, Connection reset` excludes records containing any of those three phrases. Matching is case insensitive and checks retained original record text, including continuation/stack-trace lines. `^` and `$` match individual lines within a record. The regex syntax is JavaScript regular expressions, which differs from POSIX ERE in some details.
 - Spaces around comma-separated patterns and empty comma entries are ignored. Commas inside parentheses, character classes, repetition counts such as `{1,3}`, or escaped as `\,` remain part of the regex. Escape a literal pipe as `\|`. Invalid expressions show a validation message and disable export until corrected. Exclusions combine with all other filters, affect charts/lists/exports, and are cleared by **Reset filters**. Text omitted by excerpt truncation cannot be matched by the exclusion filter.
@@ -164,7 +186,7 @@ This is a generic log visualization: it does not infer root causes, incorporate 
 make check
 ```
 
-Go tests cover parsing, multiline records, stable merge order, gzip, long Unicode lines, timestamp fallbacks and DST, Coherence metadata beyond excerpt limits, HTML embedding, command options, and overwrite protection. When `sample-logs/` is present, the tests also parse all its files together and check event ordering, unique identifiers, source locations, and Coherence classification coverage.
+Go tests cover parsing, multiline records, stable merge order, gzip, long Unicode lines, timestamp fallbacks and DST, Coherence metadata beyond excerpt limits, HTML embedding, command options, overwrite protection, HTTP report responses, and server startup/shutdown. When `sample-logs/` is present, the tests also parse all its files together and check event ordering, unique identifiers, source locations, and Coherence classification coverage.
 
 For migration parity against the original Python implementation, run:
 
@@ -174,4 +196,4 @@ make parity
 
 This optional development check requires Python 3.9+ and its timezone data. It compares every event field and all report metadata across the files in `sample-logs/`, in generic mode, detailed Coherence mode, and Coherence mode with 127-character excerpts. The original implementation is retained only as a test oracle in `testdata/wls-events-timeline.py`; the application never invokes it. The report interface may evolve independently of this data comparison.
 
-The Go source is in `main.go` (command and report generation), `parser.go` (records, timestamps and metadata), and `coherence.go` (classification rules). `web/timeline.html` is the original offline interface, embedded at compile time. Editing it requires rebuilding the executable.
+The Go source is in `main.go` (command and report generation), `parser.go` (records, timestamps and metadata), `coherence.go` (classification rules), and `serve.go` (HTTP serving). `web/timeline.html` is the offline interface, embedded at compile time. Editing it requires rebuilding the executable.

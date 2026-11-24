@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
@@ -10,8 +11,10 @@ import (
 	"html"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 	_ "time/tzdata"
 	"unicode/utf8"
@@ -24,6 +27,8 @@ type options struct {
 	paths                                                         []string
 	output, title, timezone, assumeTimezone, detailed, stylesheet string
 	maxChars                                                      int
+	serve                                                         bool
+	listen                                                        string
 }
 
 // flag's default parser stops at the first positional argument; the original
@@ -40,6 +45,8 @@ func parseArgs(args []string, stderr io.Writer) (options, error) {
 	f.IntVar(&o.maxChars, "max-detail-chars", 12000, "Maximum embedded characters per record")
 	f.StringVar(&o.detailed, "detailed-events", "", "Detailed classification: coherence")
 	f.StringVar(&o.stylesheet, "stylesheet", "", "Local CSS file to embed in the report")
+	f.BoolVar(&o.serve, "serve", false, "Serve the generated report over HTTP until Ctrl+C")
+	f.StringVar(&o.listen, "listen", "127.0.0.1:8080", "HTTP listen address (used with --serve; port 0 selects a free port)")
 	f.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: wls-events-timeline [options] LOG [LOG ...]\n\nGenerate an offline, filterable timeline from multiline WebLogic log records.")
 		f.PrintDefaults()
@@ -61,8 +68,12 @@ func parseArgs(args []string, stderr io.Writer) (options, error) {
 			f.Usage()
 			return o, flag.ErrHelp
 		}
-		if f.Lookup(name) == nil {
+		option := f.Lookup(name)
+		if option == nil {
 			return o, fmt.Errorf("unknown option: %s", arg)
+		}
+		if boolean, ok := option.Value.(interface{ IsBoolFlag() bool }); ok && boolean.IsBoolFlag() {
+			continue
 		}
 		if !strings.Contains(arg, "=") {
 			if i+1 == len(args) {
@@ -198,7 +209,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		text := strings.TrimPrefix(string(data), "\ufeff")
 		css = &text
 	}
+	stopSpinner := startSpinner(stderr, fmt.Sprintf("Processing %d log file(s)...", len(o.paths)))
+	defer stopSpinner()
 	events, warnings, total, err := parseLogs(o.paths, zone, o.maxChars, assume, o.detailed)
+	stopSpinner()
 	if err != nil {
 		fmt.Fprintln(stderr, "Error:", err)
 		return 1
@@ -219,6 +233,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "Created %s: %d records, %d parsing warnings; timezone %s.\n", o.output, len(events), len(warnings), o.timezone)
+	if o.serve {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := serveReport(ctx, o.listen, page, stdout); err != nil {
+			fmt.Fprintln(stderr, "Error:", err)
+			return 1
+		}
+	}
 	return 0
 }
 
