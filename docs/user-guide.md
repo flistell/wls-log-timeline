@@ -8,13 +8,13 @@ Build with Go 1.24 or newer and Make:
 
 ```bash
 make build
-./wls-events-timeline --help
+./bin/wls-events-timeline --help
 ```
 
 Without Make, the equivalent command is:
 
 ```bash
-CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o wls-events-timeline .
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/wls-events-timeline ./cmd/wls-events-timeline
 ```
 
 Create binaries for Linux x86-64 and ARM64, plus checksums:
@@ -32,7 +32,7 @@ Copy the matching executable to the destination Linux machine, rename it to `wls
 ## Generate a report
 
 ```bash
-./wls-events-timeline weblogic.log --timezone Europe/Rome
+./bin/wls-events-timeline weblogic.log --timezone Europe/Rome
 ```
 
 This creates `weblogic-timeline.html` in the current directory and preserves the original log.
@@ -42,14 +42,14 @@ An animated spinner on stderr shows when log files are being processed. It clear
 Pass multiple logs (including shell-expanded wildcards) to combine server logs or rotated files into one timeline:
 
 ```bash
-./wls-events-timeline server1.log server2.log server1.log00001 \
+./bin/wls-events-timeline server1.log server2.log server1.log00001 \
   --output combined.timeline.html --timezone Europe/Rome
 ```
 
 Records are merged by timestamp. Equal timestamps retain input-file order, then line order. Each record retains its source path and line numbers; source files can be filtered and searched, and exported events include their source. Each file is parsed independently, so continuation lines cannot cross file boundaries. Overlapping or repeated inputs retain all records; no deduplication is performed.
 
 ```bash
-./wls-events-timeline /path/to/server.log \
+./bin/wls-events-timeline /path/to/server.log \
   --output /tmp/server-timeline.html \
   --timezone Europe/Rome \
   --title "Production server events"
@@ -62,7 +62,7 @@ The HTML is written to the file specified by `--output` (or `-o`), or to `weblog
 Add `--serve` to generate the HTML file and keep a simple HTTP server running:
 
 ```bash
-./wls-events-timeline weblogic.log --timezone Europe/Rome --serve
+./bin/wls-events-timeline weblogic.log --timezone Europe/Rome --serve
 ```
 
 Open the printed URL, normally `http://127.0.0.1:8080/`, in a browser. Press **Ctrl+C** to stop the server; the generated HTML file remains available offline. The server shows the report generated at startup; it does not watch the input logs or reload later file edits. Only `/` serves content; input logs and other files are not served.
@@ -70,8 +70,8 @@ Open the printed URL, normally `http://127.0.0.1:8080/`, in a browser. Press **C
 Use `--listen` to choose the address and port. Port `0` selects a free port and prints the actual URL:
 
 ```bash
-./wls-events-timeline weblogic.log --serve --listen 127.0.0.1:9000
-./wls-events-timeline weblogic.log --serve --listen 127.0.0.1:0
+./bin/wls-events-timeline weblogic.log --serve --listen 127.0.0.1:9000
+./bin/wls-events-timeline weblogic.log --serve --listen 127.0.0.1:0
 ```
 
 The default address accepts connections only from this machine. To allow other machines to view the report, explicitly select an interface, for example `--listen 0.0.0.0:8080`, then open `http://<server-hostname>:8080/`. The server uses HTTP without authentication; everyone who can reach that address can read the report. If the address is unavailable, the command reports an error and exits; the generated HTML file is retained. All existing generation options work with `--serve`.
@@ -81,7 +81,7 @@ The default address accepts connections only from this machine. To allow other m
 Enable detailed Coherence classification while merging server logs from multiple hosts and rotations:
 
 ```bash
-./wls-events-timeline \
+./bin/wls-events-timeline \
   logs-20261116/salclp170*/miph0-coh/weblogic.log00001-20261115 \
   logs-20261116/salclp170*/miph0-cohext/weblogic.log00001-20261115 \
   --detailed-events=coherence \
@@ -117,7 +117,7 @@ For more than 10,000 plotted records, chart dots aggregate records into time buc
 Pass a local CSS file with `--stylesheet` to override the default appearance:
 
 ```bash
-./wls-events-timeline \
+./bin/wls-events-timeline \
   logs-20261116/*/*/weblogic.log00001-20261115 \
   --detailed-events=coherence \
   --stylesheet timeline-custom.css \
@@ -172,7 +172,7 @@ The parser handles WebLogic `####<timestamp> <severity> ...` server records and 
 WebLogic epoch milliseconds take precedence over the timestamp text. If no epoch field exists, the parser supports ISO timestamps and English WebLogic dates, including fractional seconds and common fixed timezone abbreviations/numeric offsets. For missing or unrecognized textual timezones, specify the source timezone explicitly:
 
 ```bash
-./wls-events-timeline server.log \
+./bin/wls-events-timeline server.log \
   --assume-timezone Europe/Rome --timezone Europe/Rome
 ```
 
@@ -196,6 +196,6 @@ For migration parity against the original Python implementation, run:
 make parity
 ```
 
-This optional development check requires Python 3.9+ and its timezone data. It compares every event field and all report metadata across the files in `sample-logs/`, in generic mode, detailed Coherence mode, and Coherence mode with 127-character excerpts. The original implementation is retained only as a test oracle in `testdata/wls-events-timeline.py`; the application never invokes it. The report interface may evolve independently of this data comparison.
+This optional development check requires Python 3.9+ and its timezone data. It compares every event field and all report metadata across the files in `sample-logs/`, in generic mode, detailed Coherence mode, and Coherence mode with 127-character excerpts. The original implementation is retained only as a test oracle in `testdata/reference/wls-events-timeline.py`; the application never invokes it. The report interface may evolve independently of this data comparison.
 
-The Go source is in `main.go` (command and report generation), `parser.go` (records, timestamps and metadata), `coherence.go` (classification rules), and `serve.go` (HTTP serving). `web/timeline.html` is the offline interface, embedded at compile time. Editing it requires rebuilding the executable.
+The command entry point is in `cmd/wls-events-timeline/`. CLI options, progress display and HTTP serving live in `internal/cli/`; log parsing and Coherence classification in `internal/timeline/`; report rendering and its embedded interface in `internal/report/`. `internal/report/timeline.html` is the offline interface, embedded at compile time. Editing it requires rebuilding the executable.

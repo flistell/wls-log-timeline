@@ -1,17 +1,15 @@
-package main
+package timeline
 
 import (
-	"bytes"
 	"compress/gzip"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
+	_ "time/tzdata"
 )
 
 func testLog(t *testing.T, name, text string) string {
@@ -76,7 +74,7 @@ func TestMultilineAndMerge(t *testing.T) {
 	h := serverHeader("2026-11-16T12:00:00Z", "Error", "WebLogicServer", "BEA-999999", "Server state changed to RUNNING")
 	path := testLog(t, "server.log", "preamble\n"+h+"  exception BEA1-abc123\n"+serverHeader("unsupported", "Info", "JDBC", "BEA-000627", "omitted"))
 	second := testLog(t, "stdout.log", "<2026-11-16T12:00:00Z> <Notice> <Console> <123456> <console>\n")
-	events, warnings, total, err := parseLogs([]string{path, second, path}, time.UTC, 30, nil, "")
+	events, warnings, total, err := ParseLogs([]string{path, second, path}, time.UTC, 30, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +97,7 @@ func TestCoherenceEvidenceBeyondExcerpt(t *testing.T) {
 		"  tmb://host:1234.567 Address=[::1]:9999 Service=Payments cluster \"Production\" Member(Id=7 member:node1 BEA1-xid9\n" +
 		"  Detected hard timeout\n"
 	path := testLog(t, "coherence.log", text)
-	events, _, _, err := parseLogs([]string{path}, time.UTC, 10, nil, "coherence")
+	events, _, _, err := ParseLogs([]string{path}, time.UTC, 10, nil, "coherence")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,72 +165,11 @@ func TestCRLineEndings(t *testing.T) {
 		t.Fatal("CR line endings changed records")
 	}
 }
-func TestHTMLAndCLI(t *testing.T) {
-	path := testLog(t, "server.log", serverHeader("2026-11-16T12:00:00Z", "Info", "Console", "BEA-000000", "</script><script>alert(1)</script> __TITLE__"))
-	dir := t.TempDir()
-	out := filepath.Join(dir, "report.html")
-	css := testLog(t, "custom.css", "\ufeff:root { --bg: red } /* </style> */")
-	var stdout, stderr bytes.Buffer
-	args := []string{path, "--title", "<safe> __PAYLOAD__", "--stylesheet", css, "--timezone=Europe/Rome", "-o", out}
-	if status := run(args, &stdout, &stderr); status != 0 {
-		t.Fatalf("status %d: %s", status, stderr.String())
-	}
-	data, err := os.ReadFile(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	page := string(data)
-	if strings.Contains(page, "<title><safe>") || strings.Contains(page, "<script>alert(1)") || !strings.Contains(page, "data:text/css;charset=utf-8;base64,") {
-		t.Fatal("unsafe or missing embedded content")
-	}
-	match := regexp.MustCompile(`(?s)<script type="application/json" id="data">(.*?)</script>`).FindStringSubmatch(page)
-	var p payload
-	if len(match) != 2 {
-		t.Fatal("missing payload")
-	}
-	if err := json.Unmarshal([]byte(match[1]), &p); err != nil {
-		t.Fatal(err)
-	}
-	if len(p.Events) != 1 || !strings.Contains(p.Events[0].Summary, "__TITLE__") || p.Zone != "Europe/Rome" {
-		t.Fatal("payload changed")
-	}
-	for _, args := range [][]string{{path, "-o", path}, {path, "--stylesheet", css, "-o", css}, {path, "--timezone", "Not/AZone", "-o", out}, {path, "--max-detail-chars", "0"}, {path, "--detailed-events", "unknown"}, {"--bogus"}, {}} {
-		if run(args, &stdout, &stderr) == 0 {
-			t.Fatalf("accepted invalid arguments: %v", args)
-		}
-	}
-	if run([]string{"--help"}, &stdout, &stderr) != 0 {
-		t.Fatal("help failed")
-	}
-	alias := filepath.Join(dir, "hardlink.log")
-	if err := os.Link(path, alias); err != nil {
-		t.Fatal(err)
-	}
-	if protectInputs(alias, []string{path}) == nil {
-		t.Fatal("hardlink overwrite allowed")
-	}
-	symlink := filepath.Join(dir, "symlink.log")
-	if err := os.Symlink(path, symlink); err != nil {
-		t.Fatal(err)
-	}
-	if protectInputs(symlink, []string{path}) == nil {
-		t.Fatal("symlink overwrite allowed")
-	}
-	empty := testLog(t, "empty.log", "no records\n")
-	preserved := testLog(t, "existing.html", "keep me")
-	if run([]string{empty, "-o", preserved}, &stdout, &stderr) == 0 {
-		t.Fatal("empty input accepted")
-	}
-	data, _ = os.ReadFile(preserved)
-	if string(data) != "keep me" {
-		t.Fatal("failed generation overwrote report")
-	}
-}
-
 func TestSampleLogs(t *testing.T) {
 	var paths []string
-	err := filepath.WalkDir("sample-logs", func(path string, entry os.DirEntry, err error) error {
-		if os.IsNotExist(err) && path == "sample-logs" {
+	sampleDir := filepath.Join("..", "..", "sample-logs")
+	err := filepath.WalkDir(sampleDir, func(path string, entry os.DirEntry, err error) error {
+		if os.IsNotExist(err) && path == sampleDir {
 			return filepath.SkipDir
 		}
 		if err != nil {
@@ -253,7 +190,7 @@ func TestSampleLogs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	events, warnings, lines, err := parseLogs(paths, zone, 12000, nil, "coherence")
+	events, warnings, lines, err := ParseLogs(paths, zone, 12000, nil, "coherence")
 	if err != nil {
 		t.Fatal(err)
 	}

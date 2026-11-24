@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--binary', type=Path, default=ROOT / 'wls-events-timeline')
+    parser.add_argument('--binary', type=Path, default=ROOT / 'bin/wls-events-timeline')
     parser.add_argument('--logs', type=Path, default=ROOT / 'sample-logs')
     args = parser.parse_args()
     with args.binary.open('rb') as binary:
@@ -22,7 +22,7 @@ def main():
     paths = sorted(str(p) for p in args.logs.rglob('*') if p.is_file())
     if not paths:
         parser.error('no sample logs found')
-    spec = importlib.util.spec_from_file_location('reference', ROOT / 'testdata/wls-events-timeline.py')
+    spec = importlib.util.spec_from_file_location('reference', ROOT / 'testdata/reference/wls-events-timeline.py')
     reference = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(reference)
     with tempfile.TemporaryDirectory(prefix='wls-parity-') as temp:

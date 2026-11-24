@@ -1,4 +1,4 @@
-package main
+package timeline
 
 import (
 	"bufio"
@@ -419,7 +419,9 @@ func parseLog(path string, zone *time.Location, maxChars int, assume *time.Locat
 	}
 	return events, warnings, total, nil
 }
-func parseLogs(paths []string, zone *time.Location, maxChars int, assume *time.Location, detailed string) ([]Event, []string, int, error) {
+
+// ParseLogs merges independent logs by timestamp while retaining their source locations.
+func ParseLogs(paths []string, zone *time.Location, maxChars int, assume *time.Location, detailed string) ([]Event, []string, int, error) {
 	events := []Event{}
 	warnings := []string{}
 	total := 0
