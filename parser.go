@@ -38,7 +38,7 @@ var (
 var categories = map[string]string{
 	"BEA-000337": "Stuck threads", "BEA-000339": "Thread recovery", "BEA-111015": "Transaction timeouts",
 	"BEA-101017": "HTTP errors", "BEA-011139": "EJB errors", "BEA-010026": "EJB errors", "BEA-000627": "JDBC capacity",
-	"BEA-000628": "Pool maintenance", "BEA-002939": "Work Manager", "BEA-002936": "Work Manager",
+	"BEA-000628": "Pool maintenance", "BEA-002939": "WorkManager", "BEA-002936": "WorkManager",
 }
 var offsets = map[string]int{"UTC": 0, "GMT": 0, "CET": 60, "CEST": 120, "EST": -300, "EDT": -240, "CST": -360, "CDT": -300, "MST": -420, "MDT": -360, "PST": -480, "PDT": -420}
 
@@ -344,6 +344,9 @@ func parseLog(path string, zone *time.Location, maxChars int, assume *time.Locat
 			if category == "" {
 				category = "Other"
 			}
+		}
+		if category == "Work Manager" {
+			category = "WorkManager"
 		}
 		if strings.EqualFold(subsystem, "WebLogicServer") && lifecycleRE.MatchString(message) {
 			category = "WebLogic Server Lifecycle"

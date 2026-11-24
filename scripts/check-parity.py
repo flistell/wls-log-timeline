@@ -28,6 +28,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix='wls-parity-') as temp:
         for mode, limit in [(None, 12000), ('coherence', 12000), ('coherence', 127)]:
             events, warnings, total = reference.parse_logs(paths, ZoneInfo('Europe/Rome'), limit, detailed_events=mode)
+            # The Go report intentionally consolidates this legacy category alias.
+            for event in events:
+                if event['category'] == 'Work Manager':
+                    event['category'] = 'WorkManager'
             output = Path(temp) / 'timeline.html'
             command = [str(args.binary.resolve()), *paths, '--timezone', 'Europe/Rome', '--max-detail-chars', str(limit), '-o', str(output)]
             if mode:

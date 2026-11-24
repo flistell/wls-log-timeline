@@ -163,6 +163,8 @@ Records are plotted as points; reported timeout/stuck ages are not treated as me
 
 ## Parsing and scope
 
+The category names `Work Manager` and `WorkManager` are consolidated as **WorkManager**. Original subsystem names and log text are retained.
+
 WebLogicServer messages containing `Server state changed to ...` use the category **WebLogic Server Lifecycle**, including startup, RUNNING, shutdown and failed states. This classification applies in both generic mode and `--detailed-events=coherence`; original severities and message codes are retained.
 
 The parser handles WebLogic `####<timestamp> <severity> ...` server records and `<timestamp> <severity> ...` console/stdout records. Continuation lines, including stack traces, belong to the preceding header. Standard BEA codes, other prefixed numeric codes and bare six-digit codes are supported; unknown codes remain selectable. Unknown codes use their subsystem as category.
